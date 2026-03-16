@@ -1,5 +1,10 @@
 import { Inngest } from "inngest";
 import prisma from "../config/prisma.js";
+import sendEmail from "../config/nodemailer.js"
+
+
+
+
 // Create a client to send and receive events
 export const inngest = new Inngest({ id: "Work Pilot" });
 
@@ -66,7 +71,7 @@ const syncUserUpdation = inngest.createFunction(
 //Inngest function to save workspace data to database
 
 const syncWorkspaceCreation = inngest.createFunction(
-    {id: 'create-workspace-from-clerk'},
+    {id: 'sync-workspace-from-clerk'},
     {event: 'clerk/organization.created'},
     async({event})=>{
         const {data} = event
@@ -141,6 +146,113 @@ const syncWorkspaceMemberCreation = inngest.createFunction(
     }
 )
 
+
+//Inngest function to send email on task creation
+
+const sendTaskAssignmentEmail = inngest.createFunction(
+    { id: "send-task-assignment-mail" },
+    { event: "app/task.assigned" },
+    async ({ event, step }) => {
+        const { taskId, origin } = event.data;
+
+        const task = await step.run("fetch-task", async () => {
+            return await prisma.task.findUnique({
+                where: { id: taskId },
+                include: { assignee: true, project: true }
+            });
+        });
+
+        if (!task) return;
+
+        await step.run("send-assignment-email", async () => {
+            await sendEmail({
+                to: task.assignee.email,
+                subject: `New Task Assignment in ${task.project.name}`,
+                body: `
+                    <div style="max-width: 600px; font-family: Arial, sans-serif;">
+                        <h2>Hi ${task.assignee.name},</h2>
+                        <p style="font-size: 16px;">You have been assigned a new task:</p>
+                        <p style="font-size: 18px; font-weight: bold; color: #007bff; margin: 8px 0;">
+                            ${task.title}
+                        </p>
+
+                        <div style="border: 1px solid #ddd; padding: 12px 16px; border-radius: 6px; margin-bottom: 30px;">
+                            <p style="margin: 6px 0;">
+                                <strong>Description:</strong> ${task.description}
+                            </p>
+                            <p style="margin: 6px 0;">
+                                <strong>Due Date:</strong> ${new Date(task.due_date).toLocaleDateString()}
+                            </p>
+                        </div>
+
+                        <a href="${origin}" style="background-color: #007bff; padding: 12px 24px;
+                            border-radius: 5px; color: #fff; font-weight: 600; font-size: 16px;
+                            text-decoration: none;">
+                            View Task
+                        </a>
+
+                        <p style="margin-top: 20px; font-size: 14px; color: #6c757d;">
+                            Please make sure to review and complete it before the due date.
+                        </p>
+                    </div>
+                `
+            });
+        });
+
+        if (new Date(task.due_date).toDateString() !== new Date().toDateString()) {
+            await step.sleepUntil("wait-for-due-date", new Date(task.due_date));
+
+            await step.run("check-and-send-reminder", async () => {
+                const updatedTask = await prisma.task.findUnique({
+                    where: { id: taskId },
+                    include: { assignee: true, project: true }
+                });
+
+                if (!updatedTask) return;
+                if (updatedTask.status === "DONE") return;
+
+                await sendEmail({
+                    to: updatedTask.assignee.email,
+                    subject: `Reminder: Task due today in ${updatedTask.project.name}`,
+                    body: `
+                        <div style="max-width: 600px; font-family: Arial, sans-serif;">
+                            <h2>Hi ${updatedTask.assignee.name},</h2>
+                            <p style="font-size: 16px;">
+                                This is a reminder that the following task is due today and is still pending:
+                            </p>
+                            <p style="font-size: 18px; font-weight: bold; color: #e63946; margin: 8px 0;">
+                                ${updatedTask.title}
+                            </p>
+
+                            <div style="border: 1px solid #ddd; padding: 12px 16px; border-radius: 6px; margin-bottom: 30px;">
+                                <p style="margin: 6px 0;">
+                                    <strong>Description:</strong> ${updatedTask.description}
+                                </p>
+                                <p style="margin: 6px 0;">
+                                    <strong>Due Date:</strong> ${new Date(updatedTask.due_date).toLocaleDateString()}
+                                </p>
+                                <p style="margin: 6px 0;">
+                                    <strong>Status:</strong> ${updatedTask.status}
+                                </p>
+                            </div>
+
+                            <a href="${origin}" style="background-color: #e63946; padding: 12px 24px;
+                                border-radius: 5px; color: #fff; font-weight: 600; font-size: 16px;
+                                text-decoration: none;">
+                                Complete Task Now
+                            </a>
+
+                            <p style="margin-top: 20px; font-size: 14px; color: #6c757d;">
+                                Please complete this task as soon as possible.
+                            </p>
+                        </div>
+                    `
+                });
+            });
+        }
+    }
+);
+
 // Create an empty array where we'll export future Inngest functions
 export const functions = [
     syncUserCreation,
@@ -149,6 +261,7 @@ export const functions = [
     syncWorkspaceMemberCreation,
     syncWorkspaceDeletion,
     syncWorkspaceUpdation,
-    syncWorkspaceCreation
+    syncWorkspaceCreation,
+    sendTaskAssignmentEmail
     
 ];

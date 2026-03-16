@@ -6,7 +6,6 @@
   "type": "module",
   "scripts": {
     "postinstall": "npx prisma generate",
-    
     "start": "prisma generate && node server.js",
     "server": "nodemon server.js"
   },
@@ -22,6 +21,7 @@
     "dotenv": "^17.3.1",
     "express": "^5.2.1",
     "inngest": "^3.52.6",
+    "nodemailer": "^8.0.2",
     "prisma": "^6.19.2",
     "ws": "^8.19.0"
   },

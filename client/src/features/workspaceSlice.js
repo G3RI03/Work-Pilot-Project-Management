@@ -1,11 +1,10 @@
 import { createAsyncThunk, createSlice } from "@reduxjs/toolkit";
-import { dummyWorkspaces } from "../assets/assets";
 import api from "../../configs/api";
 
 
-export const fetchWorkspaces = createAsyncThunk('workspace/fetchWorkspaces', async ({getToken}) => {
+export const fetchWorkspaces = createAsyncThunk('workspaces/fetchWorkspaces', async ({getToken}) => {
    try{
-      const {data} = await api.get('/api/workspace',{headers: 
+      const {data} = await api.get('/api/workspaces',{headers: 
         {Authorization : `Bearer ${await getToken()}`}})
         return data.workspaces || []
    }catch(error){
@@ -21,7 +20,7 @@ const initialState = {
 };
 
 const workspaceSlice = createSlice({
-    name: "workspace",
+    name: "workspaces",
     initialState,
     reducers: {
         setWorkspaces: (state, action) => {
@@ -145,5 +144,6 @@ const workspaceSlice = createSlice({
     }
 });
 
-export const { setWorkspaces, setCurrentWorkspace, addWorkspace, updateWorkspace, deleteWorkspace, addProject, addTask, updateTask, deleteTask } = workspaceSlice.actions;
+export const { setWorkspaces, setCurrentWorkspace, addWorkspace, updateWorkspace, deleteWorkspace, 
+    addProject, addTask, updateTask, deleteTask } = workspaceSlice.actions;
 export default workspaceSlice.reducer;
