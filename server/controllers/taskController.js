@@ -5,7 +5,7 @@ import { inngest } from "../inngest/index.js";
 export const createTask = async (req, res) => {
     try {
         const { userId } = await req.auth();
-        const { projectId, description, status, title, type, priority, assigneeId, due_date, origin } = req.body; // ✅ destructure origin
+        const { projectId, description, status, title, type, priority, assigneeId, due_date, origin } = req.body;
 
         //check if user has admin role for project
         const project = await prisma.project.findUnique({
@@ -27,10 +27,12 @@ export const createTask = async (req, res) => {
                 title,
                 description,
                 priority,
-                assigneeId: assigneeId || null, // ✅ fallback to null — fixes P2003
                 status,
                 type,
                 due_date: new Date(due_date),
+                assignee: assigneeId
+                    ? { connect: { id: assigneeId } } // ✅ use relation connect instead of assigneeId directly
+                    : undefined,
             }
         });
 
@@ -43,7 +45,7 @@ export const createTask = async (req, res) => {
             name: "app/task.assigned",
             data: {
                 taskId: task.id,
-                origin // ✅ now properly destructured from req.body
+                origin
             }
         });
 
@@ -85,13 +87,17 @@ export const updateTask = async (req, res) => {
         const updatedTask = await prisma.task.update({
             where: { id: req.params.id },
             data: {
-                title,
-                description,
-                status,
-                type,
-                priority,
-                assigneeId: assigneeId || null, // ✅ fixes P2003
-                due_date: due_date ? new Date(due_date) : undefined,
+                ...(title !== undefined && { title }),
+                ...(description !== undefined && { description }),
+                ...(status !== undefined && { status }),
+                ...(type !== undefined && { type }),
+                ...(priority !== undefined && { priority }),
+                ...(due_date !== undefined && { due_date: new Date(due_date) }),
+                ...(assigneeId !== undefined && { // ✅ use relation connect instead of assigneeId directly
+                    assignee: assigneeId
+                        ? { connect: { id: assigneeId } }
+                        : { disconnect: true }
+                }),
             }
         });
 
